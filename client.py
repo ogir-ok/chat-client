@@ -19,10 +19,11 @@ class RecevierThread(threading.Thread):
             self.chat.messages.append(message.decode())
             self.chat.redraw()
 
+
 class ChatWindow():
     TITLE = 'Chat'
-    USERNAME = 'Ihor Harahatyi'
-    SERVER = ('172.24.0.2', 8887)
+    USERNAME = socket.gethostname()  # 'Ihor Harahatyi'
+    SERVER = ('127.0.0.1', 8886)
 
     def __init__(self):
         self.stdscr = curses.initscr()
@@ -112,8 +113,6 @@ class ChatWindow():
         messages = result[-lines_to_draw:]
         self.stdscr.addstr(2, 0, '\n'.join(messages))
 
-
-
     def draw_input(self):
         self.stdscr.attron(curses.color_pair(2))
         message_text = self.get_message_text(self.current_mesage)
@@ -151,6 +150,7 @@ class ChatWindow():
 
 def main():
     ChatWindow().run()
+
 
 if __name__ == "__main__":
     main()

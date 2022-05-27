@@ -1,38 +1,36 @@
-import socket
-import threading
+import asyncio
 
-CONNECTIONS = set()
+list_of_users = []
 
-class SockThread(threading.Thread):
-    def __init__(self, conn, *a, **kwa):
-        self.conn = conn
-        super().__init__(*a, **kwa)
 
-    def run(self):
-        with self.conn:
-            while True:
-                data = self.conn.recv(1024)
-                print('Recieved message:', data)
-                if not data:
-                    print(f'Client {self.conn} disconnected!')
-                    CONNECTIONS.remove(self.conn)
-                    break
-                for conn in CONNECTIONS:
-                    conn.sendall(data)
+async def handle_echo(reader, writer):
+    list_of_users.append(writer)
+    addr = writer.get_extra_info('peername')
+    while True:
+        data = await reader.read(1024)
+        message = data.decode()
+        if not message:
+            print(f'Client {addr} disconnected!')
+            list_of_users.remove(writer)
+            break
+        msg(message)
+        print(f'Recieved message:{message!r}')
 
-def main():
-    with socket.socket(socket.AF_INET,
-                       socket.SOCK_STREAM,
-                       proto=socket.IPPROTO_TCP) as sock:
-        sock.bind(('0.0.0.0', 8887))
-        sock.listen()
 
-        while True:
-            conn, addr = sock.accept()
-            CONNECTIONS.add(conn)
-            print(f'Client {addr} connected.')
-            sock_thread = SockThread(conn)
-            sock_thread.start()
+def msg(message):
+    for user in list_of_users:
+        user.write(message.encode())
+
+
+async def main():
+    server = await asyncio.start_server(
+        handle_echo, '0.0.0.0', 8886)
+    addr = ', '.join(str(sock.getsockname()) for sock in server.sockets)
+    print(f'Client {addr} connected.')
+
+    async with server:
+        await server.serve_forever()
+
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
