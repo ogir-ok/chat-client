@@ -1,17 +1,22 @@
-import string
-import sys,os
+import asyncio
 import curses
+import string
 from itertools import chain
 
 
-class ChatWindow():
+class ChatWindow:
+
+    HOST = '127.0.0.1'
+    PORT = 5355
     TITLE = 'Chat'
-    USERNAME = 'Ihor Harahatyi'
+    USERNAME = 'Andrii Ocheretko'
 
     def __init__(self):
+        self.reader = None
+        self.writer = None
         self.stdscr = curses.initscr()
         self.cursor_x = 0
-        self.current_mesage = ''
+        self.current_message = ''
         self.messages = []
 
     def start(self):
@@ -29,10 +34,7 @@ class ChatWindow():
         curses.nocbreak()
         self.stdscr.keypad(False)
         curses.echo()
-
-    def send_message(self):
-        self.messages.append(self.get_message_text(self.current_mesage))
-        self.current_mesage = ''
+        self.writer.close()
 
     def get_message_text(self, message):
         message = message.strip()
@@ -75,7 +77,7 @@ class ChatWindow():
     def draw_messages(self):
         result = []
 
-        current_message_text = self.get_message_text(self.current_mesage)
+        current_message_text = self.get_message_text(self.current_message)
         input_text, lines, last_line_size = self.format_message(current_message_text)
 
         for message in self.messages:
@@ -87,42 +89,65 @@ class ChatWindow():
         messages = result[-lines_to_draw:]
         self.stdscr.addstr(2, 0, '\n'.join(messages))
 
-
-
     def draw_input(self):
         self.stdscr.attron(curses.color_pair(2))
-        message_text = self.get_message_text(self.current_mesage)
+        message_text = self.get_message_text(self.current_message)
         input_text, lines, last_line_size = self.format_message(message_text)
         self.stdscr.addstr(self.height - lines - 1, 0, input_text)
         self.stdscr.move(self.height - 1, last_line_size)
         self.stdscr.attroff(curses.color_pair(2))
 
-    def run(self):
+    def redraw(self):
+        self.stdscr.clear()
+        self.draw_title()
+        self.draw_messages()
+        self.draw_input()
+        self.stdscr.refresh()
+
+    def send_message(self):
+        self.messages.append(self.get_message_text(self.current_message))
+        self.writer.write(self.get_message_text(self.current_message).encode())
+        self.current_message = ''
+        self.redraw()
+
+    async def run(self):
+
         try:
-            self.start()
+
             k = 0
 
             while True:
+
                 if k == ord('\n'):
                     self.send_message()
+                    self.redraw()
+
                 elif k == curses.KEY_BACKSPACE:
-                    self.current_mesage = self.current_mesage[:-1]
+                    self.current_message = self.current_message[:-1]
+
                 elif k != 0:
+
                     char = chr(k)
+
                     if char in chain(string.digits, string.ascii_letters, string.whitespace):
-                        self.current_mesage += char
-                self.stdscr.clear()
-                self.draw_title()
-                self.draw_messages()
-                self.draw_input()
-                self.stdscr.refresh()
+                        self.current_message += char
+
+                self.redraw()
                 k = self.stdscr.getch()
         finally:
             self.stop()
 
+    async def receive_message(self):
+        while True:
+            data = await self.reader.read(1024)
+            self.messages.append(data.decode().split('\n'))
 
-def main():
-    ChatWindow().run()
+    async def main(self):
+        self.reader, self.writer = await asyncio.open_connection(self.HOST, self.PORT)
+        self.start()
+        await asyncio.gather(self.run(), self.receive_message())
 
-if __name__ == "__main__":
-    main()
+
+if __name__ == '__main__':
+    chat = ChatWindow()
+    asyncio.run(chat.main())
