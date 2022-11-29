@@ -2,9 +2,24 @@ import string
 import sys,os
 import curses
 from itertools import chain
+import socket
+import threading
+
+class ReceiverThread(threading.Thread):
+    def __init__(self, chat):
+        super().__init__()
+        self.chat = chat
+
+    def run(self):
+        while True:
+            data = self.chat.sock.recv(1024)
+            self.chat.messages.append(data.decode())
+            self.chat.redraw()
 
 
 class ChatWindow():
+    HOST = 'ogir-ok.com'    # The remote host
+    PORT = 5454           # The same port as used by the server
     TITLE = 'Chat'
     USERNAME = 'Ihor Harahatyi'
 
@@ -13,10 +28,13 @@ class ChatWindow():
         self.cursor_x = 0
         self.current_mesage = ''
         self.messages = []
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def start(self):
         self.stdscr.clear()
         self.stdscr.refresh()
+        self.sock.__enter__()
+        self.sock.connect((self.HOST, self.PORT))
         curses.noecho()
         curses.cbreak()
         self.stdscr.keypad(True)
@@ -26,12 +44,15 @@ class ChatWindow():
         curses.init_pair(3, curses.COLOR_BLACK, curses.COLOR_WHITE)
 
     def stop(self):
+        self.sock.__exit__()
         curses.nocbreak()
         self.stdscr.keypad(False)
         curses.echo()
 
     def send_message(self):
-        self.messages.append(self.get_message_text(self.current_mesage))
+        new_message = self.get_message_text(self.current_mesage)
+        self.messages.append(new_message)
+        self.sock.sendall(new_message.encode())
         self.current_mesage = ''
 
     def get_message_text(self, message):
@@ -97,9 +118,17 @@ class ChatWindow():
         self.stdscr.move(self.height - 1, last_line_size)
         self.stdscr.attroff(curses.color_pair(2))
 
+    def redraw(self):
+        self.stdscr.clear()
+        self.draw_title()
+        self.draw_messages()
+        self.draw_input()
+        self.stdscr.refresh()
+
     def run(self):
         try:
             self.start()
+            ReceiverThread(self).start()
             k = 0
 
             while True:
@@ -111,11 +140,7 @@ class ChatWindow():
                     char = chr(k)
                     if char in chain(string.digits, string.ascii_letters, string.whitespace):
                         self.current_mesage += char
-                self.stdscr.clear()
-                self.draw_title()
-                self.draw_messages()
-                self.draw_input()
-                self.stdscr.refresh()
+                self.redraw()
                 k = self.stdscr.getch()
         finally:
             self.stop()

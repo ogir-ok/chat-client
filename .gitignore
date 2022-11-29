@@ -152,6 +152,7 @@ yarn-error.log
 # End of https://www.gitignore.io/api/vuejs,django,virtualenv,visualstudiocode
 
 .idea
+*.iml
 .vscode
 
 static
